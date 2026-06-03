@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎁 酷炫動畫抽獎</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #1e1e2f; color: #fff; padding: 30px 20px; max-width: 850px; margin: 0 auto; text-align: center; }
+        .back-btn { position: absolute; top: 20px; left: 20px; padding: 8px 15px; background: #475569; border: none; color: white; border-radius: 4px; cursor: pointer; text-decoration: none; font-size: 14px; }
+        h1 { color: #f1c40f; margin-bottom: 5px; font-size: 32px; }
+        .anim-container { background: linear-gradient(135deg, #151522, #2a2a4e); padding: 40px; border-radius: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.5); margin: 20px 0; border: 1px solid #3d3d5c; }
+        .anim-prize-indicator { font-size: 24px; color: #2ecc71; margin-bottom: 20px; font-weight: bold; min-height: 35px; }
+        .slot-machine { font-size: 64px; font-weight: bold; background: #0b0b14; padding: 25px 50px; border-radius: 10px; border: 5px solid #f1c40f; display: inline-block; min-width: 320px; text-shadow: 0 0 15px #f1c40f; margin-bottom: 30px; letter-spacing: 2px; }
+        .slot-machine.rolling { animation: pulse 0.1s infinite alternate; color: #ff7675; border-color: #ff7675; text-shadow: 0 0 15px #ff7675; }
+        .slot-machine.winner-moment { color: #55efc4; border-color: #55efc4; text-shadow: 0 0 25px #55efc4; }
+        @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.03); } }
+        
+        .btn { padding: 15px 40px; background-color: #e74c3c; color: white; border: none; border-radius: 6px; font-size: 20px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 10px rgba(231, 76, 60, 0.4); }
+        .btn:hover { background-color: #c0392b; }
+
+        .results-section { margin-top: 35px; background: #252538; padding: 25px; border-radius: 10px; text-align: left; border: 1px solid #3d3d5c; }
+        .results-section h2 { margin-top: 0; color: #f1c40f; border-bottom: 1px solid #3d3d5c; padding-bottom: 10px; }
+        .prize-card { background: #1e1e2f; border-left: 5px solid #e74c3c; padding: 12px 20px; margin-bottom: 12px; border-radius: 0 6px 6px 0; }
+        .prize-card-title { font-weight: bold; color: #f39c12; margin-bottom: 5px; }
+        .export-box { margin-top: 30px; background: #0b0b14; padding: 20px; border-radius: 8px; }
+        textarea { width: 100%; height: 120px; background: #1e1e2f; color: #e2e8f0; border: 1px solid #475569; padding: 10px; box-sizing: border-box; border-radius: 6px; font-family: monospace; }
+        .btn-secondary { background-color: #2ecc71; margin-top: 15px; font-size: 16px; padding: 12px; display: block; width: 100%; border: none; color: white; font-weight: bold; border-radius: 6px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <a href="index.html" class="back-btn" id="btnBack">⬅ 返回控制中心</a>
+    <h1 id="viewTitle">🎁 動態拉霸抽獎</h1>
+    <div id="subInfo" style="color: #94a3b8; margin-bottom: 20px;"></div>
+
+    <div class="anim-container">
+        <div id="animPrizeIndicator">點擊按鈕開始抽取第一個獎項</div>
+        <div id="slotMachineDisplay" class="slot-machine">READY</div>
+        <div>
+            <button class="btn" id="btnStartAnim" onclick="drawSingleCandidate()">🎲 抽取下一個名額</button>
+        </div>
+    </div>
+
+    <div class="results-section">
+        <h2 id="dynamicResultsTitle">🏆 抽獎結果</h2>
+        <div id="webResultsList"></div>
+
+        <div class="export-box">
+            <div style="font-weight: bold; color: #cbd5e1; margin-bottom: 10px;">📋 清單</div>
+            <textarea id="txtLinearOutput" readonly></textarea>
+            <button class="btn-secondary" onclick="downloadTxtFile()">💾 下載抽獎結果明細 (.txt)</button>
+        </div>
+    </div>
+
+    <script>
+        let eventTitle = "", candidates = [], prizes = [];
+        let animQueue = [], currentAnimIndex = 0, isRolling = false;
+        let finalWinnersData = [];
+        let globalTxtOutput = "";
+
+        // 穩定版 Web Audio 架構
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        // 拉霸滾動音效（保證響亮且不卡死瀏覽器線程）
+        function playTickSound() {
+            try {
+                initAudio();
+                let osc = audioCtx.createOscillator();
+                let gainNode = audioCtx.createGain();
+                osc.type = 'square'; // 方波電子感更強、聲音更明顯
+                osc.frequency.setValueAtTime(440, audioCtx.currentTime); // A4音高
+                gainNode.gain.setValueAtTime(0.03, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.04);
+                osc.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.05);
+            } catch(e) {}
+        }
+
+        // 喜慶和弦中獎音效
+        function playWinSound() {
+            try {
+                initAudio();
+                let now = audioCtx.currentTime;
+                let freqs = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6 完美大四和弦
+                freqs.forEach((f, index) => {
+                    let osc = audioCtx.createOscillator();
+                    let gainNode = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(f, now + (index * 0.05));
+                    gainNode.gain.setValueAtTime(0.08, now);
+                    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
+                    osc.connect(gainNode);
+                    gainNode.connect(audioCtx.destination);
+                    osc.start(now);
+                    osc.stop(now + 0.6);
+                });
+            } catch(e) {}
+        }
+
+        window.onload = function() {
+            eventTitle = sessionStorage.getItem('draw_title') || "抽獎活動";
+            document.getElementById('viewTitle').innerText = "🎁 " + eventTitle;
+            document.getElementById('dynamicResultsTitle').innerText = `🏆 ${eventTitle}結果`;
+            
+            // 全域點擊解鎖
+            document.body.onclick = function() { initAudio(); };
+
+            try {
+                candidates = JSON.parse(sessionStorage.getItem('draw_candidates')) || [];
+                prizes = JSON.parse(sessionStorage.getItem('draw_prizes')) || [];
+            } catch(e) {
+                alert("讀取設定失敗！"); window.location.href = 'index.html'; return;
+            }
+            document.getElementById('subInfo').innerText = `目前名單總計：${candidates.length} 人`;
+
+            prizes.forEach(p => {
+                for(let i=0; i<p.count; i++) { animQueue.push(p.name); }
+            });
+            updateIndicatorText();
+        };
+
+        function updateIndicatorText() {
+            if (currentAnimIndex < animQueue.length) {
+                document.getElementById('animPrizeIndicator').innerText = `準備抽取：【${animQueue[currentAnimIndex]}】 (進度: ${currentAnimIndex + 1}/${animQueue.length})`;
+            } else {
+                document.getElementById('animPrizeIndicator').innerText = "🎉 所有項目已全部抽取完畢！";
+                document.getElementById('btnStartAnim').disabled = true;
+            }
+        }
+
+        function drawSingleCandidate() {
+            if (isRolling || currentAnimIndex >= animQueue.length) return;
+            initAudio(); 
+
+            isRolling = true;
+            document.getElementById('btnStartAnim').disabled = true;
+            document.getElementById('btnBack').style.display = 'none';
+
+            let slotDiv = document.getElementById('slotMachineDisplay');
+            let currentPrizeName = animQueue[currentAnimIndex];
+            let basePool = candidates.filter(c => !finalWinnersData.some(f => f.winner === c));
+            slotDiv.className = "slot-machine rolling";
+
+            let counter = 0;
+            let timer = setInterval(() => {
+                let randIndex = Math.floor(Math.random() * basePool.length);
+                slotDiv.innerText = basePool[randIndex];
+                
+                playTickSound(); // 滾動切換名字時響起聲音
+                counter++;
+
+                if (counter > 25) {
+                    clearInterval(timer);
+                    let finalRandIndex = Math.floor(Math.random() * basePool.length);
+                    let luckyOne = basePool[finalRandIndex];
+                    
+                    slotDiv.className = "slot-machine winner-moment";
+                    slotDiv.innerText = luckyOne;
+
+                    playWinSound(); // 停下的瞬間中獎慶祝
+
+                    finalWinnersData.push({ winner: luckyOne, prize: currentPrizeName });
+                    currentAnimIndex++;
+                    isRolling = false;
+                    document.getElementById('btnStartAnim').disabled = false;
+                    document.getElementById('btnBack').style.display = 'block';
+                    
+                    updateOutputs();
+                    updateIndicatorText();
+                }
+            }, 70); // 稍微放寬更新間隔，讓聲音波形更完整
+        }
+
+        function updateOutputs() {
+            let grouped = {};
+            finalWinnersData.forEach(item => {
+                if(!grouped[item.prize]) grouped[item.prize] = [];
+                grouped[item.prize].push(item.winner);
+            });
+            let html = "";
+            for(let p in grouped) {
+                html += `<div class="prize-card"><div class="prize-card-title">🎁 ${p} (${grouped[p].length} 名)</div><div>🎉 中獎人：${grouped[p].join(', ')}</div></div>`;
+            }
+            document.getElementById('webResultsList').innerHTML = html;
+
+            let rows = [`【活動主題】：${eventTitle}`, `中獎號碼\t中獎獎項`];
+            finalWinnersData.forEach(item => { rows.push(`${item.winner}\t${item.prize}`); });
+            globalTxtOutput = rows.join('\r\n');
+            document.getElementById('txtLinearOutput').value = rows.join('\n');
+        }
+
+        function downloadTxtFile() {
+            if (!globalTxtOutput) return;
+            let blob = new Blob([globalTxtOutput], { type: "text/plain;charset=utf-8;" });
+            let link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute("download", `${eventTitle}_拉霸結果.txt`);
+            link.click();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>抽獎設定</title>
+    <style>
+        :root {
+            --primary-color: #e74c3c; 
+            --title-color: #2c3e50;
+            --block-bg: #fff8f2;
+            --block-border: #f39c12;
+            --block-title: #d35400;
+        }
+        body { font-family: Arial, 'Microsoft JhengHei', sans-serif; background-color: #f4f7f6; padding: 30px 20px; max-width: 850px; margin: 0 auto; color: #333; }
+        .container { background: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        h1 { text-align: center; color: var(--title-color); margin-bottom: 25px; transition: color 0.3s; }
+        .section { margin-bottom: 20px; }
+        label { display: block; font-weight: bold; margin-bottom: 8px; color: var(--title-color); }
+        input[type="text"], input[type="number"], textarea { width: 100%; padding: 12px; border: 1px solid #ccd1d9; border-radius: 6px; box-sizing: border-box; }
+        textarea { height: 120px; resize: vertical; }
+        .prize-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+        .prize-table th { text-align: left; padding: 8px; color: var(--title-color); }
+        .prize-table td { padding: 6px; }
+        .btn-action { padding: 6px 12px; background-color: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .btn-action.btn-add { background-color: #34495e; margin-top: 5px; }
+        .hint { font-size: 13px; color: #7f8c8d; margin-top: 4px; }
+        
+        /* 模式按鈕 */
+        .mode-box { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 25px; }
+        .btn-mode { padding: 14px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; color: white; cursor: pointer; transition: opacity 0.2s; text-align: center; }
+        .btn-basic { background-color: #34495e; }
+        .btn-anim { background-color: #9b59b6; }
+        .btn-wheel { background-color: #1abc9c; }
+        .btn-mode:hover { opacity: 0.9; }
+
+        /* 結果呈現 */
+        .results { margin-top: 35px; border-top: 2px dashed #e2e8f0; padding-top: 25px; }
+        .prize-block { background: var(--block-bg); border-left: 5px solid var(--block-border); padding: 15px 20px; margin-bottom: 15px; border-radius: 0 8px 8px 0; text-align: left; }
+        .prize-title { font-size: 18px; font-weight: bold; color: var(--block-title); margin-bottom: 8px; }
+        .winner-list { font-size: 15px; }
+        .export-box { margin-top: 25px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; text-align: left; }
+        .btn-secondary { background-color: #2ecc71; margin-top: 15px; font-size: 16px; padding: 12px; display: block; width: 100%; border: none; color: white; font-weight: bold; border-radius: 6px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- 這裡預設會自動被 JS 蓋掉，所以不用擔心 -->
+        <h1 id="mainTitle">⚙️ 抽獎設定</h1>
+
+        <div class="section">
+            <label for="eventTitle">📋 本次抽獎主題名稱</label>
+            <input type="text" id="eventTitle" placeholder="例如：2026尾牙大抽獎" value="2026尾牙大抽獎" oninput="syncMainTitle()">
+        </div>
+
+        <div class="section">
+            <label for="candidates">1. 輸入抽獎號碼 / 名單</label>
+            <textarea id="candidates" placeholder="用逗號、空格或換行隔開。例如：1-100"></textarea>
+            <div class="hint">💡 支援連號格式，如輸入「1-100」或「A01-A50」。</div>
+        </div>
+
+        <div class="section">
+            <label>2. 設定獎項與名額</label>
+            <table class="prize-table">
+                <thead>
+                    <tr>
+                        <th style="width: 65%;">獎項名稱</th>
+                        <th style="width: 20%;">名額 (人)</th>
+                        <th style="width: 15%;">操作</th>
+                    </tr>
+                </thead>
+                <tbody id="prizeTableBody">
+                    <tr>
+                        <td><input type="text" class="prize-name" value="頭獎 萬元現金"></td>
+                        <td><input type="number" class="prize-count" min="1" value="1"></td>
+                        <td><button class="btn-action" onclick="this.closest('tr').remove()">❌</button></td>
+                    </tr>
+                    <tr>
+                        <td><input type="text" class="prize-name" value="二獎 藍牙耳機"></td>
+                        <td><input type="number" class="prize-count" min="1" value="3"></td>
+                        <td><button class="btn-action" onclick="this.closest('tr').remove()">❌</button></td>
+                    </tr>
+                </tbody>
+            </table>
+            <button class="btn-action btn-add" onclick="addPrizeRow()">➕ 增加獎項項目</button>
+        </div>
+
+        <h3 style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px; color:#2c3e50; text-align: left;">3. 選擇抽獎模式</h3>
+        <div class="mode-box">
+            <button class="btn-mode btn-basic" onclick="startBasicLottery()">⚡ 基礎模式</button>
+            <button class="btn-mode btn-anim" onclick="goDraw('slot_machine.html')">🎬 開啟動態拉霸頁</button>
+            <button class="btn-mode btn-wheel" onclick="goDraw('wheel.html')">🎡 開啟幸運大輪盤頁</button>
+        </div>
+
+        <!-- 基礎模式結果顯示 -->
+        <div class="results" id="resultsArea" style="display: none;">
+            <h2 id="resultDisplayTitle">🏆 抽獎結果網頁版</h2>
+            <div id="resultsContent"></div>
+
+            <div class="export-box">
+                <div class="export-title" style="font-weight: bold; margin-bottom: 5px;">📋 Excel 專用直列格式</div>
+                <textarea id="txtLinearOutput" style="height: 150px;" readonly></textarea>
+                <button class="btn-secondary" onclick="downloadTxtFile()">💾 下載抽獎結果 (.txt 檔)</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let globalTxtOutput = "";
+        let eventTitleStr = "";
+
+        window.onload = function() {
+            syncMainTitle();
+        };
+
+        // 拿掉「控制中心」後的同步函式
+        function syncMainTitle() {
+            let currentVal = document.getElementById('eventTitle').value.trim();
+            if(!currentVal) {
+                document.getElementById('mainTitle').innerText = "⚙️ 抽獎設定";
+            } else {
+                document.getElementById('mainTitle').innerText = `⚙️ ${currentVal}`;
+            }
+        }
+
+        function addPrizeRow() {
+            let tbody = document.getElementById('prizeTableBody');
+            let tr = document.createElement('tr');
+            tr.innerHTML = `<td><input type="text" class="prize-name" placeholder="獎項名稱"></td>
+                <td><input type="number" class="prize-count" min="1" placeholder="數量"></td>
+                <td><button class="btn-action" onclick="this.closest('tr').remove()">❌</button></td>`;
+            tbody.appendChild(tr);
+        }
+
+        function parseCandidates(text) {
+            if (!text.trim()) return [];
+            let cleanText = text.replace(/[\n\r,;，；\s]+/g, ',');
+            let items = cleanText.split(',').filter(item => item.trim() !== '');
+            let finalCandidates = [];
+            items.forEach(item => {
+                let rangeMatch = item.match(/^([A-Za-z]*)(\d+)-([A-Za-z]*)(\d+)$/);
+                if (rangeMatch) {
+                    let prefix1 = rangeMatch[1], startNum = parseInt(rangeMatch[2], 10);
+                    let prefix2 = rangeMatch[3], endNum = parseInt(rangeMatch[4], 10);
+                    if (prefix1 === prefix2 && startNum <= endNum) {
+                        let padLength = rangeMatch[2].length; 
+                        for (let i = startNum; i <= endNum; i++) {
+                            finalCandidates.push(prefix1 + String(i).padStart(padLength, '0'));
+                        }
+                    } else { finalCandidates.push(item); }
+                } else { finalCandidates.push(item); }
+            });
+            return [...new Set(finalCandidates)];
+        }
+
+        function getPrizes() {
+            let prizeList = [];
+            let names = document.querySelectorAll('.prize-name');
+            let counts = document.querySelectorAll('.prize-count');
+            for(let i=0; i<names.length; i++) {
+                let n = names[i].value.trim(), c = parseInt(counts[i].value, 10);
+                if (n !== "" && !isNaN(c) && c > 0) { prizeList.push({ name: n, count: c }); }
+            }
+            return prizeList;
+        }
+
+        function validateInput() {
+            let candidates = parseCandidates(document.getElementById('candidates').value);
+            let prizes = getPrizes();
+            eventTitleStr = document.getElementById('eventTitle').value.trim() || "抽獎活動";
+            if (candidates.length === 0) { alert('請輸入抽獎號碼/名單！'); return null; }
+            if (prizes.length === 0) { alert('請填寫至少一組正確的獎項！'); return null; }
+            let total = prizes.reduce((sum, p) => sum + p.count, 0);
+            if (total > candidates.length) { alert(`總名額 (${total}人) 大於人數 (${candidates.length}人)！`); return null; }
+            return { candidates, prizes, title: eventTitleStr };
+        }
+
+        function startBasicLottery() {
+            let input = validateInput();
+            if (!input) return;
+            let pool = [...input.candidates];
+            for (let i = pool.length - 1; i > 0; i--) {
+                let j = Math.floor(Math.random() * (i + 1));
+                [pool[i], pool[j]] = [pool[j], pool[i]];
+            }
+            let winners = [];
+            input.prizes.forEach(prize => {
+                for (let c = 0; c < prize.count; c++) {
+                    winners.push({ winner: pool.pop(), prize: prize.name });
+                }
+            });
+            showBasicResults(winners);
+        }
+
+        function showBasicResults(winners) {
+            let grouped = {};
+            let rows = [`【活動主題】：${eventTitleStr}`, `中獎號碼\t中獎獎項`];
+            winners.forEach(item => {
+                if(!grouped[item.prize]) grouped[item.prize] = [];
+                grouped[item.prize].push(item.winner);
+                rows.push(`${item.winner}\t${item.prize}`);
+            });
+            let html = '';
+            for (let p in grouped) {
+                html += `<div class="prize-block"><div class="prize-title">🎁 ${p}</div><div class="winner-list">🎉 名單：${grouped[p].join(', ')}</div></div>`;
+            }
+            document.getElementById('resultDisplayTitle').innerText = `🏆 【${eventTitleStr}】抽獎結果`;
+            document.getElementById('resultsContent').innerHTML = html;
+            globalTxtOutput = rows.join('\r\n');
+            document.getElementById('txtLinearOutput').value = rows.join('\n');
+            document.getElementById('resultsArea').style.display = 'block';
+        }
+
+        function goDraw(targetPage) {
+            let input = validateInput();
+            if (!input) return;
+            sessionStorage.setItem('draw_title', input.title);
+            sessionStorage.setItem('draw_candidates', JSON.stringify(input.candidates));
+            sessionStorage.setItem('draw_prizes', JSON.stringify(input.prizes));
+            window.location.href = targetPage;
+        }
+
+        function downloadTxtFile() {
+            let blob = new Blob([globalTxtOutput], { type: "text/plain;charset=utf-8;" });
+            let link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute("download", `${eventTitleStr}_結果.txt`);
+            link.click();
+        }
+    </script>
+</body>
+</html>
